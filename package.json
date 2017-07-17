@@ -4,7 +4,8 @@
   "description": "A slackbot that can schedule meetings for you and your team",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon index.js"
   },
   "repository": {
     "type": "git",
@@ -17,6 +18,8 @@
   },
   "homepage": "https://github.com/jchen53/SlackSchedulerBot#readme",
   "dependencies": {
-    "@slack/client": "^3.10.0"
+    "@slack/client": "^3.10.0",
+    "express": "^4.15.3",
+    "nodemon": "^1.11.0"
   }
 }

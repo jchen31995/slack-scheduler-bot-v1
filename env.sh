@@ -1,0 +1,1 @@
+export SLACK_BOT_TOKEN='xoxb-213947965394-XNen0AgniVFymFbnGFV9Fciv'
