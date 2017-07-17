@@ -1,0 +1,22 @@
+{
+  "name": "slackschedulebot",
+  "version": "1.0.0",
+  "description": "A slackbot that can schedule meetings for you and your team",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jchen53/SlackSchedulerBot.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jchen53/SlackSchedulerBot/issues"
+  },
+  "homepage": "https://github.com/jchen53/SlackSchedulerBot#readme",
+  "dependencies": {
+    "@slack/client": "^3.10.0"
+  }
+}
