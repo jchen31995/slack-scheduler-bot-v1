@@ -2,10 +2,10 @@
   "name": "slackschedulebot",
   "version": "1.0.0",
   "description": "A slackbot that can schedule meetings for you and your team",
-  "main": "index.js",
+  "main": "app.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon index.js"
+    "start": "nodemon app.js"
   },
   "repository": {
     "type": "git",
@@ -21,6 +21,7 @@
     "@slack/client": "^3.10.0",
     "axios": "^0.16.2",
     "babel": "^6.23.0",
+    "body-parser": "^1.17.2",
     "express": "^4.15.3",
     "google-auth-library": "^0.10.0",
     "googleapis": "^20.1.0",
