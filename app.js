@@ -13,20 +13,109 @@ app.get('/', function(req, res) {
 	console.log('hello');
 })
 
+
+var google = require('googleapis');
+var OAuth2 = google.auth.OAuth2;
+var { User } = require('./models')
+
+function getGoogleAuth(){
+	return new OAuth2(
+		process.env.GOOGLE_CLIENT_ID,
+		process.env.GOOGLE_CLIENT_SECRET,
+		'http://localhost:3000/connect/callback'
+		);
+}
+
+function listEvents(auth) {
+  var calendar = google.calendar('v3');
+  calendar.events.list({
+    auth: auth,
+    calendarId: 'primary',
+    timeMin: (new Date()).toISOString(),
+    maxResults: 10,
+    singleEvents: true,
+    orderBy: 'startTime'
+  }, function(err, response) {
+    if (err) {
+      console.log('The API returned an error: ' + err);
+      return;
+    }
+    var events = response.items;
+    if (events.length == 0) {
+      console.log('No upcoming events found.');
+    } else {
+      console.log('Upcoming 10 events:');
+      for (var i = 0; i < events.length; i++) {
+        var event = events[i];
+        var start = event.start.dateTime || event.start.date;
+        console.log('%s - %s', start, event.summary);
+      }
+    }
+  });
+}
+
+function insertReminder(auth, user){
+	var calendar = google.calendar('v3');
+		
+	var resource = {
+			summary: user.description, // event title
+			//location: 'horizons', //location 
+			start: {
+				date: user.date // events starts time
+			},
+			end: {
+				date: user.date // events ends time
+			},
+			attendees: ['abc@gmail.com','xyz@gmail.com']
+		};
+
+	calendar.events.insert({
+		auth: auth,
+		calendarId: 'primary',
+		sendNotifications: true,
+		resource: resource
+	},function(err,resp) {
+		if (err) {
+		        console.log('There was an error : ' + err);
+		return;
+		}
+		console.log(resp,'Event created:', resp.htmlLink);
+	});
+
+}
+
+// this is where we handle events
 app.post('/slack/interactive', function(req, res) {
 	var payload = JSON.parse(req.body.payload);
 	console.log('BODY', payload);
-    if (payload.actions[0].value === 'confirm') { //if confirm button is hit
-        var attachment = payload.original_message.attachments[0]; // make a copy of attachments (the interactive part)
-        delete attachment.actions; // delete buttons
-        attachment.text = 'Reminder set'; // change the text after confirm button clicked
-        attachment.color = '#53B987' // changes color to green
-        res.json({
+    if (payload.actions[0].value === 'confirm') { //if confirm button is hit        
+		var attachment = payload.original_message.attachments[0];
+		delete attachment.actions; // delete buttons
+ 	    attachment.text = 'Reminder set'; // change the text after confirm button clicked
+ 	    attachment.color = '#53B987' // changes color to green
+ 	    res.json({
             replace_original: true, // replaces  original interactive message box with new messagee
             text: 'Created reminder :fire:',
             attachments: [attachment]
         });
-    }
+
+		// ASDJFKLA;SFJDL;KASJDFL;AJSDF;KLJAS;LKDFJ;AKLSDFLKASJDF;LKJ
+		// ASDJLKF;AJSL;DKFJL;ASJDFL;KAJS;DLFJLK;ASDJFKL;ASJDLK;FJASL;KDFJL;KASDF
+		// ASDJFKLA;JSDFL;JALS;DFJ;KLASJFL;KJDSAL;FJASL;KDFJLK;ASJDFL;KJASDF
+
+		//here you're supposed to getToken and access google api
+		User.findOne({slackId: payload.user.id})
+		.then(function(user){
+			console.log('USER ASDJKFL;AJF', user)
+			var googleAuth = getGoogleAuth();
+			var credentials = Object.assign({}, user.google);
+			delete credentials.profile_id;
+			delete credentials.profile_name;
+			googleAuth.setCredentials(credentials);
+			insertReminder(googleAuth, user)
+			var attachment = payload.original_message.attachments[0]; // make a copy of attachments (the interactive part)
+		})
+	}
     else {
     	var attachment = payload.original_message.attachments[0];
     	delete attachment.actions;
@@ -40,18 +129,6 @@ app.post('/slack/interactive', function(req, res) {
     	});
     }
 });
-
-var google = require('googleapis');
-var OAuth2 = google.auth.OAuth2;
-var { User } = require('./models')
-
-function getGoogleAuth(){
-	return new OAuth2(
-		process.env.GOOGLE_CLIENT_ID,
-		process.env.GOOGLE_CLIENT_SECRET,
-		'http://localhost:3000/connect/callback'
-		);
-}
 
 const GOOGLE_SCOPES = [
 'https://www.googleapis.com/auth/userinfo.profile',
@@ -76,6 +153,7 @@ app.get('/connect', function(req,res){
 				scope: GOOGLE_SCOPES,
 				state: userId
 			})
+			//https://accounts.google.com/o/oauth2/auth?access_type=offline&prompt=consent&scope=...
 			res.redirect(url)
 		}
 	});
@@ -88,28 +166,36 @@ app.get('/connect/callback', function(req,res){
     // Now tokens contains an access_token and an optional refresh_token. Save them.
     if (err) {
     	res.status(500).json({error: err});
-    } else {
+    } else {	
     	googleAuth.setCredentials(tokens);
+
     	var plus = google.plus('v1');
     	plus.people.get({ auth: googleAuth, userId: 'me'}, function(err, googleUser) {
     		if (err) {
+    			console.log("it gets here")
     			res.status(500).json({error: err});
     		} else {
     			User.findById(req.query.state)
+    			//this mongoUser: {_id,slackId,slackDmId}
     			.then(function(mongoUser) {
+
+    				console.log("Saving user", mongoUser)
     				mongoUser.google = tokens;
     				mongoUser.google.profile_id = googleUser.id;
     				mongoUser.google.profile_name = googleUser.displayName;
     				return mongoUser.save();
     			})
-    			.then(function(mongoUser) {
-    				res.send('You are connected to Google Calendar');
-    				rtm.sendMessage("You're are now connected to Google Calendar", mongoUser.slackDmId)
+    			// this mongoUser: {google and meta data}
+    			.then(function(mongoUser) { 
+    				console.log("after saving user", mongoUser)
+    				res.send("You are now connected to Google Calendar")
+    				rtm.sendMessage("You are now connected to Google Calendar", mongoUser.slackDmId)
+    				// insertEvent(googleAuth)
     			});
     		}
     	});
-    }
-});
+      }
+	});
 })
 
 

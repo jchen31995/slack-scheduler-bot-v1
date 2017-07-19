@@ -5,6 +5,8 @@ mongoose.Promise = global.Promise; //best practice if you're using mongoose/prom
 mongoose.connect(process.env.MONGODB_URI);
 
 var User = mongoose.model('User', {
+	description: String,
+	date: String,
 	slackId: {
 		type: String,
 		required: true
