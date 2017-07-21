@@ -54,17 +54,49 @@ function listEvents(auth) {
   });
 }
 
-function insertReminder(auth, user){
+function insertMeeting(auth, user){
 	var calendar = google.calendar('v3');
-		
+	console.log("USER HERE HERE ", user)
+
 	var resource = {
-			summary: user.description, // event title
+			summary: user.pending.eventTitle, // event title
 			//location: 'horizons', //location 
 			start: {
-				date: user.date // events starts time
+				dateTime: user.pending.startDate, // events starts time
+				'timeZone': 'America/Los_Angeles'
 			},
 			end: {
-				date: user.date // events ends time
+				dateTime: user.pending.endDate, // events ends time
+				'timeZone': 'America/Los_Angeles'
+			},
+			attendees: ['abc@gmail.com','xyz@gmail.com']
+		};
+
+	calendar.events.insert({
+		auth: auth,
+		calendarId: 'primary',
+		sendNotifications: true,
+		resource: resource
+	},function(err,resp) {
+		if (err) {
+		        console.log('There was an error : ' + err);
+		return;
+		}
+		console.log(resp,'Event created:', resp.htmlLink);
+	});
+}
+
+function insertReminder(auth, user){
+	var calendar = google.calendar('v3');
+
+	var resource = {
+			summary: user.pending.eventTitle, // event title
+			//location: 'horizons', //location 
+			start: {
+				date: user.pending.date // events starts time
+			},
+			end: {
+				date: user.pending.date // events ends time
 			},
 			attendees: ['abc@gmail.com','xyz@gmail.com']
 		};
@@ -89,13 +121,13 @@ app.post('/slack/interactive', function(req, res) {
 	var payload = JSON.parse(req.body.payload);
 	console.log('BODY', payload);
     if (payload.actions[0].value === 'confirm') { //if confirm button is hit        
-		var attachment = payload.original_message.attachments[0];
+		var attachment = payload.original_message.attachments[0]; // make a copy of attachments (the interactive part)
 		delete attachment.actions; // delete buttons
- 	    attachment.text = 'Reminder set'; // change the text after confirm button clicked
+ 	    attachment.text = 'Event created'; // change the text after confirm button clicked
  	    attachment.color = '#53B987' // changes color to green
  	    res.json({
             replace_original: true, // replaces  original interactive message box with new messagee
-            text: 'Created reminder :fire:',
+            text: "It's on your calendar :fire:",
             attachments: [attachment]
         });
 
@@ -112,8 +144,11 @@ app.post('/slack/interactive', function(req, res) {
 			delete credentials.profile_id;
 			delete credentials.profile_name;
 			googleAuth.setCredentials(credentials);
-			insertReminder(googleAuth, user)
-			var attachment = payload.original_message.attachments[0]; // make a copy of attachments (the interactive part)
+			if (payload.callback_id==='message'){
+				insertMeeting(googleAuth, user)
+			} else{
+				insertReminder(googleAuth, user)
+			}
 		})
 	}
     else {
@@ -190,7 +225,7 @@ app.get('/connect/callback', function(req,res){
     				console.log("after saving user", mongoUser)
     				res.send("You are now connected to Google Calendar")
     				rtm.sendMessage("You are now connected to Google Calendar", mongoUser.slackDmId)
-    				// insertEvent(googleAuth)
+    				
     			});
     		}
     	});

@@ -3,6 +3,8 @@ var WebClient = require('@slack/client').WebClient;
 var CLIENT_EVENTS = require('@slack/client').CLIENT_EVENTS;
 var RTM_EVENTS = require('@slack/client').RTM_EVENTS;
 
+var moment = require('moment')
+
 var bot_token = process.env.SLACK_BOT_TOKEN || '';
 var slack_token = process.env.SLACK_API_TOKEN || '';
 
@@ -25,9 +27,16 @@ rtm.on(CLIENT_EVENTS.RTM.AUTHENTICATED, (rtmStartData) => {
 //   rtm.sendMessage("Wubba Lubba Dub Dub!", channel);
 // });
 
+function capitalizeString(string){
+    return string.charAt(0).toUpperCase() + string.slice(1)
+}
+
+function convertFromMilitaryTime(input) {
+    return moment(input, 'HH:mm:ss').format('h:mm:ss A');
+}
+
 
 var { User } = require('./models');
-
 // curl: 'https://api.api.ai/api/query?v=20150910&query=remind%20me%20to%20do%20laundry&lang=en&sessionId=0cbcbfc3-2c12-440c-9ea3-bf7528243e7b&timezone=2017-07-18T09:33:45-0700' -H 'Authorization:Bearer SLACKBOTTOKEN''
 var axios = require('axios');
 rtm.on(RTM_EVENTS.MESSAGE, function handleRtmMessage(message) {
@@ -75,46 +84,133 @@ rtm.on(RTM_EVENTS.MESSAGE, function handleRtmMessage(message) {
     		if (data.result.actionIncomplete) {
     			rtm.sendMessage(data.result.fulfillment.speech, message.channel);
     		}
-    		else {
-    		//console.log('ACTION IS COMPLETE', data.result);
-    		// this is probably where you store information on subject and date into mongoose/queries
-    		
-            user.description = data.result.parameters.subject
-            user.date = data.result.parameters.date
-            user.save()
-      
-            console.log("DATA ", data.result.parameters)
-            let prompt = "Creating reminder for " + data.result.parameters.subject + ' on ' + data.result.parameters.date
-            
-            web.chat.postMessage(message.channel, prompt, {
-    			"as_user": "true",
-                    "text": "Hihi", //text doesn't send
-                    "attachments": [
-                        {
-                        	"text": "Click to create reminder or cancel",
-                        	"fallback": "You are unable to choose an action",
-                        	"callback_id": "action",
-                        	"color": "#3AA3E3",
-                        	"attachment_type": "default",
-                        	"actions": [
-                        	{
-                        		"name": "action",
-                        		"text": "Confirm",
-                        		"type": "button",
-                        		"value": "confirm"
-                        	},
-                        	{
-                        		"name": "action",
-                        		"text": "Cancel",
-                        		"type": "button",
-                        		"value": "cancel"
-                        	}
-                        	]
+    		else { // Action is complete
+                console.log('ACTION IS COMPLETE', data.result);
+                // add meeting
+                console.log(data.result.parameters.invitees)
+                var meetingWith = "";
+
+                
+                // add meeting
+                if (data.result.metadata.intentName === 'meeting.add'){ 
+                    data.result.parameters.invitees.forEach(function(person){
+                        person = capitalizeString(person)
+                        var lastPerson = capitalizeString(data.result.parameters.invitees[data.result.parameters.invitees.length-1]);
+                        if (person!== lastPerson){
+                            meetingWith=meetingWith + person + ', '
+                        } else if (person === lastPerson && data.result.parameters.invitees.length!==1){
+                            meetingWith=meetingWith + 'and ' + person
+                        } else{
+                            meetingWith= meetingWith + person
                         }
-                    ]
-                })
-    	}
-    })
+                    })
+                    if (user.subject===''){
+                        user.pending.eventTitle = `Meeting with ${meetingWith}`
+                    } else{
+                        user.pending.eventTitle = `${capitalizeString(data.result.parameters.subject)} with ${meetingWith}`
+                    }
+                    
+                    let unit = ""
+                    let eventDuration = ""
+                    if(data.result.parameters.duration.unit === 'h'){
+                        unit = 'hr'
+                    } else{
+                        unit = 'min'
+                    }
+                    eventDuration = data.result.parameters.duration.amount.toString() + ' ' + unit
+
+                    //this part of the code is a little messy, can clean up later
+                    let dateString = data.result.parameters.date + 'T' + data.result.parameters.time + '-07:00'
+                    let datePrompt = moment.utc(data.result.parameters.date + 'T' + data.result.parameters.time + 'Z')
+                  
+                    let startDateTime = moment.utc(dateString)
+                    let endDateTime = moment.utc(dateString).add(data.result.parameters.duration.amount, data.result.parameters.duration.unit)
+                    
+                    user.pending.subject = capitalizeString(data.result.parameters.subject)
+                    user.pending.date = data.result.parameters.date
+                    user.pending.active = true
+                    user.pending.duration = eventDuration
+                    user.pending.invitees = data.result.parameters.invitees
+                    user.pending.startDate = startDateTime
+                    user.pending.endDate = endDateTime
+                    user.pending.eventType = 'meeting'
+                    user.save()
+
+
+
+                    let prompt = "Scheduling: " + user.pending.eventTitle + ' on ' + startDateTime.format('LL') + ' at ' + datePrompt.format('LT') + ' for ' + eventDuration
+                    web.chat.postMessage(message.channel, prompt, {
+                        "as_user": "true",
+                            "attachments": [
+                            {
+                                "text": "Click to schedule the event or cancel",
+                                "fallback": "You are unable to choose an action",
+                                "callback_id": "meeting",
+                                "color": "#3AA3E3",
+                                "attachment_type": "default",
+                                "actions": [
+                                {
+                                    "name": "action",
+                                    "text": "Confirm",
+                                    "type": "button",
+                                    "value": "confirm"
+                                },
+                                {
+                                    "name": "action",
+                                    "text": "Cancel",
+                                    "type": "button",
+                                    "value": "cancel"
+                                }
+                                ]
+                            }
+                            ]
+                        })
+                }
+                // add reminder
+                else if (data.result.metadata.intentName === 'reminder.add'){
+                    console.log("DATE ", data.result.parameters.date)
+                    user.pending.eventTitle = capitalizeString(data.result.parameters.subject)
+                    user.pending.date = data.result.parameters.date
+                    user.pending.active = true
+                    user.pending.invitees = data.result.parameters.invitees
+                    user.pending.eventType = 'reminder'
+                    user.save()
+
+
+
+                    //console.log("DATA ", data.result.parameters)
+                    let prompt = "Scheduling: remind to " + data.result.parameters.subject + ' on ' + moment(user.pending.date).format('LL')
+                    
+                    web.chat.postMessage(message.channel, prompt, {
+                        "as_user": "true",
+                            "text": "Hihi", //text doesn't send
+                            "attachments": [
+                            {
+                                "text": "Click to create reminder or cancel",
+                                "fallback": "You are unable to choose an action",
+                                "callback_id": "reminder",
+                                "color": "#3AA3E3",
+                                "attachment_type": "default",
+                                "actions": [
+                                {
+                                    "name": "action",
+                                    "text": "Confirm",
+                                    "type": "button",
+                                    "value": "confirm"
+                                },
+                                {
+                                    "name": "action",
+                                    "text": "Cancel",
+                                    "type": "button",
+                                    "value": "cancel"
+                                }
+                                ]
+                            }
+                            ]
+                        })
+                }
+            }
+        })
 
     })
     
