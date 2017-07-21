@@ -15,10 +15,10 @@ let channel;
 
 // The client will emit an RTM.AUTHENTICATED event on successful connection, with the `rtm.start` payload
 rtm.on(CLIENT_EVENTS.RTM.AUTHENTICATED, (rtmStartData) => {
-	for (const c of rtmStartData.channels) {
-		if (c.is_member && c.name === 'general') { channel = c.id }
-	}
-	console.log(`Logged in as ${rtmStartData.self.name} of team ${rtmStartData.team.name}, but not yet connected to a channel`);
+    for (const c of rtmStartData.channels) {
+        if (c.is_member && c.name === 'general') { channel = c.id }
+    }
+    console.log(`Logged in as ${rtmStartData.self.name} of team ${rtmStartData.team.name}, but not yet connected to a channel`);
 });
 
 // you need to wait for the client to fully connect before you can send messages
@@ -44,47 +44,47 @@ rtm.on(RTM_EVENTS.MESSAGE, function handleRtmMessage(message) {
     var dm = rtm.dataStore.getDMByUserId(message.user);
     // if message is not a dm, ignore it
     if (!dm || dm.id !== message.channel || message.type !== 'message') {
-    	return;
+        return;
     }
 
     User.findOne({ slackId: message.user })
     .then(function(user){
 
-    	if(!user){
-    		return new User({
-    			slackId: message.user,
-    			slackDmId: message.channel
-    		}).save()
-    	
-    	}
-    	return user;
+        if(!user){
+            return new User({
+                slackId: message.user,
+                slackDmId: message.channel
+            }).save()
+        
+        }
+        return user;
     })
     .then(function(user){
-    	console.log('USER IS', user)
-    	console.log('Message:', message);
-    	if (!user.google){
-    		rtm.sendMessage(`Hello. Rick Sanchez. I need access to your Google calendar. 
+        console.log('USER IS', user)
+        console.log('Message:', message);
+        if (!user.google){
+            rtm.sendMessage(`Hello. Rick Sanchez. I need access to your Google calendar. 
 
-    		Go to http://localhost:3000/connect?user=${user._id} to set up Google access. `, message.channel)
-    		return 
-    	}
-    	axios.get('https://api.api.ai/api/query', {
-    		params: {
-    			v: '20150910',
-    			lang: 'en',
-    			sessionId: message.user,
-    			timezone: '2017-07-17T14:16:47-0700',
-    			query: message.text
-    		},
-    		headers: {
-    			Authorization: `Bearer ${process.env.API_AI_TOKEN}`
-    		}
-    	})
-    	.then(function({data}) {
-    		if (data.result.actionIncomplete) {
-    			rtm.sendMessage(data.result.fulfillment.speech, message.channel);
-    		}
-    		else { // Action is complete
+            Go to http://localhost:3000/connect?user=${user._id} to set up Google access. `, message.channel)
+            return 
+        }
+        axios.get('https://api.api.ai/api/query', {
+            params: {
+                v: '20150910',
+                lang: 'en',
+                sessionId: message.user,
+                timezone: '2017-07-17T14:16:47-0700',
+                query: message.text
+            },
+            headers: {
+                Authorization: `Bearer ${process.env.API_AI_TOKEN}`
+            }
+        })
+        .then(function({data}) {
+            if (data.result.actionIncomplete) {
+                rtm.sendMessage(data.result.fulfillment.speech, message.channel);
+            }
+            else { // Action is complete
                 console.log('ACTION IS COMPLETE', data.result);
                 // add meeting
                 console.log(data.result.parameters.invitees)
@@ -219,5 +219,5 @@ rtm.on(RTM_EVENTS.MESSAGE, function handleRtmMessage(message) {
 rtm.start();
 
 module.exports = {
-	rtm
+    rtm
 }
