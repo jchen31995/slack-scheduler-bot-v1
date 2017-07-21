@@ -56,8 +56,6 @@ function listEvents(auth) {
 
 function insertMeeting(auth, user){
 	var calendar = google.calendar('v3');
-	console.log("USER HERE HERE ", user)
-
 	var resource = {
 			summary: user.pending.eventTitle, // event title
 			//location: 'horizons', //location 
@@ -69,7 +67,7 @@ function insertMeeting(auth, user){
 				dateTime: user.pending.endDate, // events ends time
 				'timeZone': 'America/Los_Angeles'
 			},
-			attendees: ['abc@gmail.com','xyz@gmail.com']
+			attendees: user.pending.attendees
 		};
 
 	calendar.events.insert({
@@ -93,12 +91,11 @@ function insertReminder(auth, user){
 			summary: user.pending.eventTitle, // event title
 			//location: 'horizons', //location 
 			start: {
-				date: user.pending.date // events starts time
+				date: user.pending.date // reminder date
 			},
 			end: {
-				date: user.pending.date // events ends time
-			},
-			attendees: ['abc@gmail.com','xyz@gmail.com']
+				date: user.pending.date // reminder date
+			}
 		};
 
 	calendar.events.insert({
@@ -120,11 +117,32 @@ function insertReminder(auth, user){
 app.post('/slack/interactive', function(req, res) {
 	var payload = JSON.parse(req.body.payload);
 	console.log('BODY', payload);
-    if (payload.actions[0].value === 'confirm') { //if confirm button is hit        
+    if (payload.actions[0].value === 'confirm') { //if confirm button is hit    
+    	//here you're supposed to getToken and access google api
 		var attachment = payload.original_message.attachments[0]; // make a copy of attachments (the interactive part)
+		User.findOne({slackId: payload.user.id})
+		.then(function(user){
+			var googleAuth = getGoogleAuth();
+			var credentials = Object.assign({}, user.google);
+			delete credentials.profile_id;
+			delete credentials.profile_name;
+			googleAuth.setCredentials(credentials);
+			if (payload.callback_id==='meeting'){
+				insertMeeting(googleAuth, user)
+			} else{
+				insertReminder(googleAuth, user)
+			}
+		})
+
 		delete attachment.actions; // delete buttons
- 	    attachment.text = 'Event created'; // change the text after confirm button clicked
- 	    attachment.color = '#53B987' // changes color to green
+		if (payload.callback_id==='meeting'){
+			attachment.text = 'Meeting created'; // change the text after confirm button clicked
+ 	    	attachment.color = '#53B987' // changes color to green
+		} else{
+			attachment.text = 'Reminder created'; // change the text after confirm button clicked
+ 	    	attachment.color = '#800080' // changes color to purple
+		}
+ 	    
  	    res.json({
             replace_original: true, // replaces  original interactive message box with new messagee
             text: "It's on your calendar :fire:",
@@ -135,21 +153,7 @@ app.post('/slack/interactive', function(req, res) {
 		// ASDJLKF;AJSL;DKFJL;ASJDFL;KAJS;DLFJLK;ASDJFKL;ASJDLK;FJASL;KDFJL;KASDF
 		// ASDJFKLA;JSDFL;JALS;DFJ;KLASJFL;KJDSAL;FJASL;KDFJLK;ASJDFL;KJASDF
 
-		//here you're supposed to getToken and access google api
-		User.findOne({slackId: payload.user.id})
-		.then(function(user){
-			console.log('USER ASDJKFL;AJF', user)
-			var googleAuth = getGoogleAuth();
-			var credentials = Object.assign({}, user.google);
-			delete credentials.profile_id;
-			delete credentials.profile_name;
-			googleAuth.setCredentials(credentials);
-			if (payload.callback_id==='message'){
-				insertMeeting(googleAuth, user)
-			} else{
-				insertReminder(googleAuth, user)
-			}
-		})
+		
 	}
     else {
     	var attachment = payload.original_message.attachments[0];

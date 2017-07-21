@@ -86,19 +86,40 @@ rtm.on(RTM_EVENTS.MESSAGE, function handleRtmMessage(message) {
             }
             else { // Action is complete
                 console.log('ACTION IS COMPLETE', data.result);
-                // add meeting
-                console.log(data.result.parameters.invitees)
-                var meetingWith = "";
-
-                
+             
                 // add meeting
                 if (data.result.metadata.intentName === 'meeting.add'){ 
-                    data.result.parameters.invitees.forEach(function(person){
+                    // ASSUMPTION: IF THERE ARE SLACK USERS, THEY WILL ALL BE SLACK USERS
+                    // if there are slack users
+                    var onlySlackUsers = false;
+                    var regex = /<@\w+>/g
+                    var attendees = []
+                    var attendeeNames = []
+                    message.text.match(regex).forEach(function(person){
+                        onlySlackUsers = true;
+                        let userId = person.substring(2).slice(0,-1)
+                        let userEmail = rtm.dataStore.getUserById(userId).profile.email
+                        let attendeeName = rtm.dataStore.getUserById(userId).profile.real_name
+                        if(!attendees.includes(userEmail)){
+                            attendees.push(userEmail)
+                            attendeeNames.push(attendeeName)
+                        }
+                    })
+                    var allInvitees;
+                    if (onlySlackUsers){
+                        allInvitees= attendeeNames
+                    } else{
+                        allInvitees = data.result.parameters.invitees
+                    }
+                    var meetingWith = "";
+                    allInvitees.forEach(function(person){
+                        //if slack user and has @ at beginning of name
+
                         person = capitalizeString(person)
-                        var lastPerson = capitalizeString(data.result.parameters.invitees[data.result.parameters.invitees.length-1]);
+                        var lastPerson = capitalizeString(allInvitees[allInvitees.length-1]);
                         if (person!== lastPerson){
                             meetingWith=meetingWith + person + ', '
-                        } else if (person === lastPerson && data.result.parameters.invitees.length!==1){
+                        } else if (person === lastPerson && allInvitees.length!==1){
                             meetingWith=meetingWith + 'and ' + person
                         } else{
                             meetingWith= meetingWith + person
@@ -110,12 +131,18 @@ rtm.on(RTM_EVENTS.MESSAGE, function handleRtmMessage(message) {
                         user.pending.eventTitle = `${capitalizeString(data.result.parameters.subject)} with ${meetingWith}`
                     }
                     
+                    //kind of a hacky way of getting the prompt to show up nicely, can think more later
                     let unit = ""
                     let eventDuration = ""
                     if(data.result.parameters.duration.unit === 'h'){
                         unit = 'hr'
                     } else{
                         unit = 'min'
+                    }
+                    
+                    //converting default value of duration to an object
+                    if (data.result.parameters.duration==="30 min"){
+                        data.result.parameters.duration = {"amount": 30, "unit": "min"}
                     }
                     eventDuration = data.result.parameters.duration.amount.toString() + ' ' + unit
 
@@ -134,6 +161,7 @@ rtm.on(RTM_EVENTS.MESSAGE, function handleRtmMessage(message) {
                     user.pending.startDate = startDateTime
                     user.pending.endDate = endDateTime
                     user.pending.eventType = 'meeting'
+                    user.pending.attendees = attendees
                     user.save()
 
 

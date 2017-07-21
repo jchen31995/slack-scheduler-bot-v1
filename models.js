@@ -23,7 +23,8 @@ var User = mongoose.model('User', {
 			duration: String,
 			invitees: Array, // with whom
 			active: Boolean,
-			eventType: String
+			eventType: String,
+			attendees: Array
 
 	},
 	google: {
