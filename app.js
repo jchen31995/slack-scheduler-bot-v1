@@ -1,4 +1,4 @@
-var `exp`ress = require('express');
+var express = require('express');
 var bodyParser = require('body-parser');
 var path = require('path');
 var { rtm } = require('./bot');
