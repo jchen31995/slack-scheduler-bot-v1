@@ -5,12 +5,18 @@ var { rtm } = require('./bot');
 var app = express();
 
 
+const GOOGLE_SCOPES = [
+'https://www.googleapis.com/auth/userinfo.profile',
+'https://www.googleapis.com/auth/calendar'
+]
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// no function other than to check everything hosted correctly
 app.get('/', function(req, res) {
-	console.log('hello');
+	console.log('Local host up and running on ngrok');
 })
 
 
@@ -18,6 +24,8 @@ var google = require('googleapis');
 var OAuth2 = google.auth.OAuth2;
 var { User } = require('./models')
 
+
+// configures the Google API 
 function getGoogleAuth(){
 	return new OAuth2(
 		process.env.GOOGLE_CLIENT_ID,
@@ -26,34 +34,7 @@ function getGoogleAuth(){
 		);
 }
 
-function listEvents(auth) {
-  var calendar = google.calendar('v3');
-  calendar.events.list({
-    auth: auth,
-    calendarId: 'primary',
-    timeMin: (new Date()).toISOString(),
-    maxResults: 10,
-    singleEvents: true,
-    orderBy: 'startTime'
-  }, function(err, response) {
-    if (err) {
-      console.log('The API returned an error: ' + err);
-      return;
-    }
-    var events = response.items;
-    if (events.length == 0) {
-      console.log('No upcoming events found.');
-    } else {
-      console.log('Upcoming 10 events:');
-      for (var i = 0; i < events.length; i++) {
-        var event = events[i];
-        var start = event.start.dateTime || event.start.date;
-        console.log('%s - %s', start, event.summary);
-      }
-    }
-  });
-}
-
+// inserts meeting into Google Calendar at specified time
 function insertMeeting(auth, user){
 	var calendar = google.calendar('v3');
 	var resource = {
@@ -70,33 +51,35 @@ function insertMeeting(auth, user){
 			attendees: user.pending.attendees
 		};
 
-	calendar.events.insert({
-		auth: auth,
-		calendarId: 'primary',
-		sendNotifications: true,
-		resource: resource
-	},function(err,resp) {
-		if (err) {
-		        console.log('There was an error : ' + err);
-		return;
-		}
-		console.log(resp,'Event created:', resp.htmlLink);
-	});
-}
+		calendar.events.insert({
+			auth: auth,
+			calendarId: 'primary',
+			sendNotifications: true,
+			resource: resource
+		},function(err,resp) {
+			if (err) {
+				console.log('There was an error : ' + err);
+				return;
+			}
+			console.log(resp,'Event created:', resp.htmlLink);
+		});
+	}
 
+
+// insert reminder into Google Calendar as all-day event
 function insertReminder(auth, user){
 	var calendar = google.calendar('v3');
 
 	var resource = {
-			summary: user.pending.eventTitle, // event title
-			//location: 'horizons', //location 
-			start: {
-				date: user.pending.date // reminder date
-			},
-			end: {
-				date: user.pending.date // reminder date
-			}
-		};
+		summary: user.pending.eventTitle, // event title
+		//location: 'horizons',
+		start: {
+			date: user.pending.date // reminder date
+		},
+		end: {
+			date: user.pending.date // reminder date
+		}
+	};
 
 	calendar.events.insert({
 		auth: auth,
@@ -105,20 +88,22 @@ function insertReminder(auth, user){
 		resource: resource
 	},function(err,resp) {
 		if (err) {
-		        console.log('There was an error : ' + err);
-		return;
+			console.log('There was an error : ' + err);
+			return;
 		}
 		console.log(resp,'Event created:', resp.htmlLink);
 	});
 
 }
 
-// this is where we handle events
+// this is where we handle the actual events
+// receiving the webhook request with ExpressJS
 app.post('/slack/interactive', function(req, res) {
 	var payload = JSON.parse(req.body.payload);
+
 	console.log('BODY', payload);
     if (payload.actions[0].value === 'confirm') { //if confirm button is hit    
-    	//here you're supposed to getToken and access google api
+    	//here you're supposed to get token and access google api
 		var attachment = payload.original_message.attachments[0]; // make a copy of attachments (the interactive part)
 		User.findOne({slackId: payload.user.id})
 		.then(function(user){
@@ -138,41 +123,31 @@ app.post('/slack/interactive', function(req, res) {
 		if (payload.callback_id==='meeting'){
 			attachment.text = 'Meeting created'; // change the text after confirm button clicked
  	    	attachment.color = '#53B987' // changes color to green
-		} else{
+ 	    } else{
 			attachment.text = 'Reminder created'; // change the text after confirm button clicked
  	    	attachment.color = '#800080' // changes color to purple
-		}
+ 	    }
  	    
  	    res.json({
             replace_original: true, // replaces  original interactive message box with new messagee
-            text: "It's on your calendar :fire:",
+            text: "It's on your calendar. Ping me to schedule another event!",
             attachments: [attachment]
         });
+ 	}
+ 	else {
+ 		var attachment = payload.original_message.attachments[0];
+ 		delete attachment.actions;
+ 		console.log(attachment);
+ 		attachment.text = 'Cancelled reminder';
+ 		attachment.color = '#DD4814'
+ 		res.json({
+ 			replace_original: true,
+ 			text: 'Cancelled reminder :disappointed:',
+ 			attachments: [attachment]
+ 		});
+ 	}
+ });
 
-		// ASDJFKLA;SFJDL;KASJDFL;AJSDF;KLJAS;LKDFJ;AKLSDFLKASJDF;LKJ
-		// ASDJLKF;AJSL;DKFJL;ASJDFL;KAJS;DLFJLK;ASDJFKL;ASJDLK;FJASL;KDFJL;KASDF
-		// ASDJFKLA;JSDFL;JALS;DFJ;KLASJFL;KJDSAL;FJASL;KDFJLK;ASJDFL;KJASDF
-
-		
-	}
-    else {
-    	var attachment = payload.original_message.attachments[0];
-    	delete attachment.actions;
-    	console.log(attachment);
-    	attachment.text = 'Cancelled reminder';
-    	attachment.color = '#DD4814'
-    	res.json({
-    		replace_original: true,
-    		text: 'Cancelled reminder :disappointed:',
-    		attachments: [attachment]
-    	});
-    }
-});
-
-const GOOGLE_SCOPES = [
-'https://www.googleapis.com/auth/userinfo.profile',
-'https://www.googleapis.com/auth/calendar'
-]
 
 app.get('/connect', function(req,res){
 	var userId = req.query.user
@@ -199,6 +174,7 @@ app.get('/connect', function(req,res){
 	}
 })
 
+// where we connect and get the callback to authorize Google Calendar, saving our user to mongoDB
 app.get('/connect/callback', function(req,res){
 	var googleAuth = getGoogleAuth();
 	googleAuth.getToken(req.query.code, function (err, tokens) {
@@ -233,9 +209,40 @@ app.get('/connect/callback', function(req,res){
     			});
     		}
     	});
-      }
-	});
+    }
+});
 })
+
+// lists events on Google calendar
+// was used to check if Google Calendar API is working
+// coule be used to handle time conflicts
+function listEvents(auth) {
+	var calendar = google.calendar('v3');
+	calendar.events.list({
+		auth: auth,
+		calendarId: 'primary',
+		timeMin: (new Date()).toISOString(),
+		maxResults: 10,
+		singleEvents: true,
+		orderBy: 'startTime'
+	}, function(err, response) {
+		if (err) {
+			console.log('The API returned an error: ' + err);
+			return;
+		}
+		var events = response.items;
+		if (events.length == 0) {
+			console.log('No upcoming events found.');
+		} else {
+			console.log('Upcoming 10 events:');
+			for (var i = 0; i < events.length; i++) {
+				var event = events[i];
+				var start = event.start.dateTime || event.start.date;
+				console.log('%s - %s', start, event.summary);
+			}
+		}
+	});
+}
 
 
 app.listen(3000);

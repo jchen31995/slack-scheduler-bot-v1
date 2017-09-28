@@ -18,14 +18,8 @@ rtm.on(CLIENT_EVENTS.RTM.AUTHENTICATED, (rtmStartData) => {
     for (const c of rtmStartData.channels) {
         if (c.is_member && c.name === 'general') { channel = c.id }
     }
-    console.log(`Logged in as ${rtmStartData.self.name} of team ${rtmStartData.team.name}, but not yet connected to a channel`);
+console.log(`Logged in as ${rtmStartData.self.name} of team ${rtmStartData.team.name}, but not yet connected to a channel`);
 });
-
-// you need to wait for the client to fully connect before you can send messages
-//channel === id
-// rtm.on(CLIENT_EVENTS.RTM.RTM_CONNECTION_OPENED, function () {
-//   rtm.sendMessage("Wubba Lubba Dub Dub!", channel);
-// });
 
 function capitalizeString(string){
     return string.charAt(0).toUpperCase() + string.slice(1)
@@ -55,19 +49,20 @@ rtm.on(RTM_EVENTS.MESSAGE, function handleRtmMessage(message) {
                 slackId: message.user,
                 slackDmId: message.channel
             }).save()
-        
+
         }
         return user;
     })
     .then(function(user){
-        console.log('USER IS', user)
-        console.log('Message:', message);
+        // if the user doesn't have google credentials
         if (!user.google){
-            rtm.sendMessage(`Hello. Rick Sanchez. I need access to your Google calendar. 
+            rtm.sendMessage(`Hello! I need access to your Google calendar. 
 
-            Go to http://localhost:3000/connect?user=${user._id} to set up Google access. `, message.channel)
+                Go to http://localhost:3000/connect?user=${user._id} to set up Google access and then come back!`, message.channel)
             return 
         }
+
+        // sending a request to API AI with the token to authorize API 
         axios.get('https://api.api.ai/api/query', {
             params: {
                 v: '20150910',
@@ -81,30 +76,37 @@ rtm.on(RTM_EVENTS.MESSAGE, function handleRtmMessage(message) {
             }
         })
         .then(function({data}) {
-            if (data.result.actionIncomplete) {
+            if (data.result. Incomplete) {
                 rtm.sendMessage(data.result.fulfillment.speech, message.channel);
             }
             else { // Action is complete
                 console.log('ACTION IS COMPLETE', data.result);
-             
+
                 // add meeting
                 if (data.result.metadata.intentName === 'meeting.add'){ 
                     // ASSUMPTION: IF THERE ARE SLACK USERS, THEY WILL ALL BE SLACK USERS
                     // if there are slack users
+
+                    // pulling meta data from api ai query and formatting meeting request
                     var onlySlackUsers = false;
                     var regex = /<@\w+>/g
                     var attendees = []
                     var attendeeNames = []
-                    message.text.match(regex).forEach(function(person){
-                        onlySlackUsers = true;
-                        let userId = person.substring(2).slice(0,-1)
-                        let userEmail = rtm.dataStore.getUserById(userId).profile.email
-                        let attendeeName = rtm.dataStore.getUserById(userId).profile.real_name
-                        if(!attendees.includes(userEmail)){
-                            attendees.push(userEmail)
-                            attendeeNames.push(attendeeName)
-                        }
-                    })
+
+                    if (message.text.match(regex)){
+                        message.text.match(regex).forEach(function(person){
+                            onlySlackUsers = true;
+                            let userId = person.substring(2).slice(0,-1)
+                            let userEmail = rtm.dataStore.getUserById(userId).profile.email
+                            let attendeeName = rtm.dataStore.getUserById(userId).profile.real_name
+                            if(!attendees.includes(userEmail)){
+                                console.log("USER EMAIL: ", userEmail)
+                                attendees.push(userEmail)
+                                attendeeNames.push(attendeeName)
+                            }
+                        })
+                    }
+
                     var allInvitees;
                     if (onlySlackUsers){
                         allInvitees= attendeeNames
@@ -112,9 +114,10 @@ rtm.on(RTM_EVENTS.MESSAGE, function handleRtmMessage(message) {
                         allInvitees = data.result.parameters.invitees
                     }
                     var meetingWith = "";
+
+
                     allInvitees.forEach(function(person){
                         //if slack user and has @ at beginning of name
-
                         person = capitalizeString(person)
                         var lastPerson = capitalizeString(allInvitees[allInvitees.length-1]);
                         if (person!== lastPerson){
@@ -139,6 +142,7 @@ rtm.on(RTM_EVENTS.MESSAGE, function handleRtmMessage(message) {
                     } else{
                         unit = 'min'
                     }
+
                     
                     //converting default value of duration to an object
                     if (data.result.parameters.duration==="30 min"){
@@ -149,7 +153,7 @@ rtm.on(RTM_EVENTS.MESSAGE, function handleRtmMessage(message) {
                     //this part of the code is a little messy, can clean up later
                     let dateString = data.result.parameters.date + 'T' + data.result.parameters.time + '-07:00'
                     let datePrompt = moment.utc(data.result.parameters.date + 'T' + data.result.parameters.time + 'Z')
-                  
+
                     let startDateTime = moment.utc(dateString)
                     let endDateTime = moment.utc(dateString).add(data.result.parameters.duration.amount, data.result.parameters.duration.unit)
                     
@@ -164,36 +168,39 @@ rtm.on(RTM_EVENTS.MESSAGE, function handleRtmMessage(message) {
                     user.pending.attendees = attendees
                     user.save()
 
+                    
 
 
                     let prompt = "Scheduling: " + user.pending.eventTitle + ' on ' + startDateTime.format('LL') + ' at ' + datePrompt.format('LT') + ' for ' + eventDuration
+                    
+
                     web.chat.postMessage(message.channel, prompt, {
-                        "as_user": "true",
-                            "attachments": [
+                        "attachments": [
+                        {
+                            "text": "Click to schedule the event or cancel",
+                            "fallback": "You are unable to choose an action",
+                            "callback_id": "meeting",
+                            "color": "#3AA3E3",
+                            "attachment_type": "default",
+                            "actions": [
                             {
-                                "text": "Click to schedule the event or cancel",
-                                "fallback": "You are unable to choose an action",
-                                "callback_id": "meeting",
-                                "color": "#3AA3E3",
-                                "attachment_type": "default",
-                                "actions": [
-                                {
-                                    "name": "action",
-                                    "text": "Confirm",
-                                    "type": "button",
-                                    "value": "confirm"
-                                },
-                                {
-                                    "name": "action",
-                                    "text": "Cancel",
-                                    "type": "button",
-                                    "value": "cancel"
-                                }
-                                ]
+                                "name": "action",
+                                "text": "Confirm",
+                                "type": "button",
+                                "value": "confirm"
+                            },
+                            {
+                                "name": "action",
+                                "text": "Cancel",
+                                "type": "button",
+                                "valreue": "cancel"
                             }
                             ]
-                        })
+                        }
+                        ]
+                    })
                 }
+
                 // add reminder
                 else if (data.result.metadata.intentName === 'reminder.add'){
                     console.log("DATE ", data.result.parameters.date)
@@ -204,44 +211,41 @@ rtm.on(RTM_EVENTS.MESSAGE, function handleRtmMessage(message) {
                     user.pending.eventType = 'reminder'
                     user.save()
 
-
-
-                    //console.log("DATA ", data.result.parameters)
-                    let prompt = "Scheduling: remind to " + data.result.parameters.subject + ' on ' + moment(user.pending.date).format('LL')
+                    // data.result.parameters gives date + subject (eg. 'do laundry')
+                    let prompt = "Scheduling: reminder to " + data.result.parameters.subject + ' on ' + moment(user.pending.date).format('LL')
                     
                     web.chat.postMessage(message.channel, prompt, {
                         "as_user": "true",
-                            "text": "Hihi", //text doesn't send
-                            "attachments": [
+                        "attachments": [
+                        {
+                            "text": "Click to create reminder or cancel",
+                            "fallback": "You are unable to choose an action",
+                            "callback_id": "reminder",
+                            "color": "#3AA3E3",
+                            "attachment_type": "default",
+                            "actions": [
                             {
-                                "text": "Click to create reminder or cancel",
-                                "fallback": "You are unable to choose an action",
-                                "callback_id": "reminder",
-                                "color": "#3AA3E3",
-                                "attachment_type": "default",
-                                "actions": [
-                                {
-                                    "name": "action",
-                                    "text": "Confirm",
-                                    "type": "button",
-                                    "value": "confirm"
-                                },
-                                {
-                                    "name": "action",
-                                    "text": "Cancel",
-                                    "type": "button",
-                                    "value": "cancel"
-                                }
-                                ]
+                                "name": "action",
+                                "text": "Confirm",
+                                "type": "button",
+                                "value": "confirm"
+                            },
+                            {
+                                "name": "action",
+                                "text": "Cancel",
+                                "type": "button",
+                                "value": "cancel"
                             }
                             ]
-                        })
+                        }
+                        ]
+                    })
                 }
             }
         })
 
-    })
-    
+})
+
 });
 
 rtm.start();
