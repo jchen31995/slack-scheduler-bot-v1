@@ -9,10 +9,10 @@ This Scheduler Bot is a Slack bot that easily organizes meetings and reminders f
 - Ngrok was used to create a secure URL for Slack to post requests to
 
 # Demo
-Scheduling a meeting
+**Scheduling a meeting**
 ![alt text](https://raw.githubusercontent.com/jchen53/SlackSchedulerBot/master/demo/Meetings.gif)
 
-Scheduling a reminder
+**Scheduling a reminder**
 ![alt text](https://raw.githubusercontent.com/jchen53/SlackSchedulerBot/master/demo/Reminders.gif)
 
 # Tokens Needed to Run Program
