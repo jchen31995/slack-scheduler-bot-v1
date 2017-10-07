@@ -10,10 +10,10 @@ This Scheduler Bot is a Slack bot that easily organizes meetings and reminders f
 
 # Demo
 Scheduling a meeting
-![alt text](https://raw.githubusercontent.com/jchen53/SlackSchedulerBot/master/demo/Meetings.mov)
+![alt text](https://raw.githubusercontent.com/jchen53/SlackSchedulerBot/master/demo/Meetings.gif)
 
 Scheduling a reminder
-![alt text](https://raw.githubusercontent.com/jchen53/SlackSchedulerBot/master/demo/Reminders.mov)
+![alt text](https://raw.githubusercontent.com/jchen53/SlackSchedulerBot/master/demo/Reminders.gif)
 
 # Tokens Needed to Run Program
 - Slack bot token
